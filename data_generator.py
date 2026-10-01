@@ -43,7 +43,7 @@ def build_city_graph() -> Tuple[nx.Graph, Dict[str, str], Dict[str, str]]:
     """
     G = nx.Graph()
 
-    # 1. Define nodes: (id, name, zone, lat, lon, is_hospital)
+    
     raw_nodes = [
         # DHANMONDI
         ("D1", "Dhanmondi 2", "Dhanmondi", 23.7461, 90.3742, False),
