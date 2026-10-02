@@ -397,3 +397,249 @@ if role == "Citizen":
                         if o["status"] == "delivered":
                             st.success(f"Delivery #{o['id']} completed successfully!")
 
+elif role == "🏛️ Health Official":
+    st.title("🏛️ Vector Control & Disease Surveillance Center")
+    st.markdown(
+        "City-wide epidemiological monitoring, AI outbreak forecasting, pesticide resistance intelligence, "
+        "and automated spray routing optimization."
+    )
+
+    tab_overview, tab_forecast, tab_spray = st.tabs([
+        "📊 Spatial Risk & Resistance Intelligence",
+        "🔮 Environmental Outbreak Predictor",
+        "🚜 Vector Spray Route Planner"
+    ])
+
+    # TAB 1: SPATIAL RISK & RESISTANCE
+    with tab_overview:
+        st.subheader("Urban Vector Risk Stratification (K-Means Clustering)")
+
+        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+        total_cases = df_with_risk["Actual_Cases"].sum()
+        high_risk_count = (df_with_risk["Risk_Level"] == "High").sum()
+        resistant_count = (df_with_risk["Permethrin_Resistant"] == 1).sum()
+
+        with col_k1:
+            st.metric("Total Active Cases", int(total_cases))
+        with col_k2:
+            st.metric("High-Risk Hotspots", int(high_risk_count))
+        with col_k3:
+            st.metric("Resistant Vectors Detected", int(resistant_count))
+        with col_k4:
+            st.metric("Monitored Locations", len(df_with_risk))
+
+        st.markdown("#### Spatial Risk Map")
+        fig_risk = plot_city_network(title="Dhaka Mosquito Risk Clustering (K-Means)")
+        st.pyplot(fig_risk)
+
+        st.markdown("#### Ward-Level Surveillance Data")
+        with st.expander("ℹ️ Column guide (purpose & how each value is found)"):
+            st.markdown(
+                "| Column | Purpose | How it is calculated |\n"
+                "|---|---|---|\n"
+                "| **Node_ID** | Graph node code (e.g. D1, Z3) | Fixed in `build_city_graph()` |\n"
+                "| **Location** | Human-readable ward name | Fixed in city graph |\n"
+                "| **Zone** | Municipal area (Dhanmondi, etc.) | Node attribute in graph |\n"
+                "| **Risk_Level** | Spray priority tier (Low/Medium/High) | K-Means on Aegypti + Albopictus counts; centroids ranked by total vector load |\n"
+                "| **Actual_Cases** | Estimated active dengue/chikungunya cases | Synthetic: `0.35×Rainfall + 0.45×Temp − 0.22×Humidity + noise`, clipped 0–150 |\n"
+                "| **Aegypti_Count** | Urban container-breeding mosquito index | Scales with `Urbanization_Score` (seed=42) |\n"
+                "| **Albopictus_Count** | Vegetation/water-breeding mosquito index | Scales with `Water_Index` (seed=42) |\n"
+                "| **Water_Index** | Standing-water / breeding-site score (0–1) | Zone-based random: higher in Hazaribagh/Zigatola |\n"
+                "| **Urbanization_Score** | Built-up area score (0–1) | Zone-based random: higher in Dhanmondi/Shahbagh |\n"
+                "| **Resistant** | Permethrin resistance flag (Yes/No) | Yes if Aegypti > median **and** Water_Index > 0.5 |\n"
+                "| **Recommended_Medicine** | Suggested pesticide for this ward | KNN resistance check + water-index rules in `recommend_medicine()` |"
+            )
+
+        display_df = df_with_risk[[
+            "Node_ID", "Location", "Zone", "Risk_Level", "Actual_Cases",
+            "Aegypti_Count", "Albopictus_Count", "Water_Index", "Urbanization_Score", "Permethrin_Resistant"
+        ]].copy()
+        display_df["Resistant"] = display_df["Permethrin_Resistant"].map({1: "Yes", 0: "No"})
+        display_df = display_df.drop(columns=["Permethrin_Resistant"])
+
+        rec_meds = []
+        for _, r in df_with_risk.iterrows():
+            m_name, _ = ai_models.recommend_medicine(r, knn_model)
+            rec_meds.append(m_name)
+        display_df["Recommended_Medicine"] = rec_meds
+        st.dataframe(display_df, use_container_width=True)
+
+        st.markdown("#### Live District-Wide Hospital Status")
+        summary_rows = []
+        for hid, data in st.session_state["hospital_inventory"].items():
+            summary_rows.append({
+                "Hospital ID": hid,
+                "Name": data["name"],
+                "Zone": data["zone"],
+                "Available Beds": data["Available_Beds"],
+                "Total Beds": data["Total_Beds"],
+                "Dengue Specialist": "Yes" if data["Has_Specialist"] else "No",
+                "Oral Medication": data["stock"]["Oral Medication"],
+                "IV Saline": data["stock"]["IV Saline"],
+            })
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+    # TAB 2: OUTBREAK PREDICTION
+    with tab_forecast:
+        st.subheader("Environmental Outbreak Forecasting (Logistic Regression)")
+        st.write(
+            "Simulate how climate anomalies (temperature shifts, monsoon rainfall surges, and humidity) "
+            "trigger epidemic mosquito-borne disease outbreaks (>50 cases)."
+        )
+
+        col_w1, col_w2, col_w3 = st.columns(3)
+        with col_w1:
+            sim_temp = st.slider("Temperature (°C)", min_value=20.0, max_value=42.0, value=32.0, step=0.5)
+        with col_w2:
+            sim_rain = st.slider("Rainfall (mm)", min_value=10.0, max_value=350.0, value=180.0, step=5.0)
+        with col_w3:
+            sim_hum = st.slider("Relative Humidity (%)", min_value=40.0, max_value=100.0, value=78.0, step=1.0)
+
+        # Scale features using pre-fitted StandardScaler
+        input_raw = pd.DataFrame([{
+            "Temperature": sim_temp,
+            "Rainfall": sim_rain,
+            "Humidity": sim_hum
+        }])
+        input_scaled = scaler.transform(input_raw)
+        outbreak_prob = outbreak_model.predict_proba(input_scaled)[0][1]
+
+        st.markdown("---")
+        st.write(f"### Predicted Outbreak Probability: **{outbreak_prob * 100:.1f}%**")
+        st.progress(float(outbreak_prob))
+
+        if outbreak_prob >= 0.65:
+            st.error(
+                "🚨 **HIGH OUTBREAK ALERT**: Meteorological parameters heavily favor rapid mosquito breeding and "
+                "shortened extrinsic incubation period. Mobilize district fogging units immediately!"
+            )
+        elif outbreak_prob >= 0.35:
+            st.warning(
+                "⚡ **ELEVATED RISK**: Moderate outbreak probability. Intensify source reduction and public awareness campaigns."
+            )
+        else:
+            st.success("✅ **STABLE RISK**: Baseline environmental conditions. Routine surveillance recommended.")
+
+    # TAB 3: SPRAY ROUTE OPTIMIZATION
+    with tab_spray:
+        st.subheader("Vector Spray Tour Optimizer (Path Enumeration + Risk Scoring)")
+        st.write(
+            "Finds the best no-backtrack spray route within your medicine budget. "
+            "Paths are scored by risk-zone coverage (High > Medium > Low), "
+            "then shortest distance breaks ties."
+        )
+
+        col_sp1, col_sp2, col_sp3 = st.columns(3)
+        with col_sp1:
+            all_nodes = list(G.nodes)
+            start_node = st.selectbox(
+                "Starting location:",
+                all_nodes,
+                index=all_nodes.index("DEPOT"),
+                format_func=lambda nid: f"{node_lookup[nid]} ({nid})"
+            )
+        with col_sp2:
+            med_choice = st.selectbox(
+                "Medicine type:",
+                list(MEDICINES.keys()),
+                index=1
+            )
+        with col_sp3:
+            units_input = st.number_input(
+                "Units of medicine available:",
+                min_value=0.5, max_value=50.0, value=20.0, step=0.5
+            )
+
+        spec = MEDICINES[med_choice]
+        effective_range = units_input * spec["km_per_unit"]
+        st.info(
+            f"**{med_choice}:** {spec['description']} | "
+            f"**Targets:** {', '.join(spec['targets'])} | "
+            f"**km per unit:** {spec['km_per_unit']} | "
+            f"📏 **Effective range: {effective_range:.1f} km**"
+        )
+
+        spray_input_key = f"{start_node}|{med_choice}|{units_input}"
+
+        if st.button("🚀 Compute Optimal Spray Route", type="primary"):
+            st.session_state["spray_res"] = optimization.plan_spray_route(
+                G, df_with_risk, start_node, med_choice, units_input
+            )
+            st.session_state["spray_input_key"] = spray_input_key
+
+        if (
+            "spray_res" in st.session_state
+            and st.session_state.get("spray_input_key") == spray_input_key
+        ):
+            spray_res = st.session_state["spray_res"]
+            current_med_choice = med_choice
+
+            # Warnings for edge cases
+            if "reason" in spray_res:
+                st.warning(f"⚠️ {spray_res['reason']}")
+            if "note" in spray_res:
+                st.warning(f"ℹ️ {spray_res['note']}")
+
+            # Route text
+            route_text = " → ".join(spray_res["path_names"])
+            st.markdown(f"**🗺️ Spray Route:** {route_text}")
+            if spray_res.get("was_random_tiebreak"):
+                st.caption("ℹ️ Two equally effective routes existed — one was chosen at random.")
+
+            # Stats row
+            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+            with col_r1:
+                st.metric("📍 Nodes Sprayed", len(spray_res["stops"]))
+            with col_r2:
+                st.metric(
+                    "🏁 Distance",
+                    f"{spray_res['total_distance_km']} km"
+                )
+            with col_r3:
+                st.metric("💊 Medicine Used", f"{spray_res['units_used']} units")
+            with col_r4:
+                st.metric("🧪 Remaining", f"{spray_res['units_remaining']} units")
+
+            # High risk coverage summary
+            st.markdown(
+                f"**🦟 High-Risk Coverage:** "
+                f"{spray_res['high_risk_covered']} / {spray_res['total_high_risk']} zones "
+                f"| **Path Score:** {spray_res['score']}"
+            )
+
+            # Plot route on NetworkX graph
+            fig_spray = plot_city_network(
+                highlight_path=spray_res["path"],
+                spray_stops=spray_res["stops"],
+                coverage_map=spray_res["coverage_map"],
+                title=f"Optimized Spray Route ({current_med_choice})"
+            )
+            st.pyplot(fig_spray)
+
+            # Optional coverage detail
+            if spray_res["stops"]:
+                with st.expander("📊 Coverage Detail — what the % means"):
+                    st.markdown(
+                        "Each **Coverage %** shows how much pesticide reached a node after spraying the chosen route. "
+                        "Every sprayed stop applies full dose (100%) at that node. Neighbouring nodes receive less based on "
+                        "the medicine's **diffusion radius** and **diffusion factor** "
+                        "(e.g. Malathion: 40% at 1 hop, 16% at 2 hops). "
+                        "Values are capped at 100%. Coverage is for display only — it does not change route selection."
+                    )
+                    cov_map = spray_res["coverage_map"]
+                    zone_rows = []
+                    for nid in G.nodes:
+                        risk = df_with_risk.loc[df_with_risk["Node_ID"] == nid, "Risk_Level"].values
+                        risk_label = risk[0] if len(risk) > 0 else "N/A"
+                        zone_rows.append({
+                            "Node": nid,
+                            "Name": node_lookup.get(nid, nid),
+                            "Risk": risk_label,
+                            "Coverage %": round(cov_map.get(nid, 0.0) * 100, 1)
+                        })
+                    df_cov = pd.DataFrame(zone_rows).sort_values("Coverage %", ascending=False)
+                    st.dataframe(df_cov, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Adjust inputs above, then click **Compute Optimal Spray Route** to see results.")
+
+
