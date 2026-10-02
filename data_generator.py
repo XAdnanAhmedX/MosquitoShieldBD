@@ -287,3 +287,48 @@ def generate_symptom_data() -> pd.DataFrame:
     })
     return df_symptoms
 
+def generate_hospital_inventory() -> Dict[str, Dict[str, Any]]:
+    """
+    Returns initial mutable hospital dictionary for st.session_state.
+    """
+    return {
+        "H1": {
+            "name": "Popular Hospital",
+            "node": "H1",
+            "zone": "Dhanmondi",
+            "Total_Beds": 60,
+            "Available_Beds": 35,
+            "Has_Specialist": True,
+            "stock": {"Oral Medication": 80, "IV Saline": 40, "Injection": 30}
+        },
+        "H2": {
+            "name": "BSMMU Hospital",
+            "node": "H2",
+            "zone": "Shahbagh",
+            "Total_Beds": 120,
+            "Available_Beds": 55,
+            "Has_Specialist": True,
+            "stock": {"Oral Medication": 150, "IV Saline": 90, "Injection": 60}
+        },
+        "H3": {
+            "name": "Hazaribagh Clinic",
+            "node": "H3",
+            "zone": "Hazaribagh",
+            "Total_Beds": 30,
+            "Available_Beds": 8,
+            "Has_Specialist": False,
+            "stock": {"Oral Medication": 40, "IV Saline": 15, "Injection": 10}
+        },
+        "H4": {
+            "name": "Ibn Sina Zigatola",
+            "node": "H4",
+            "zone": "Zigatola",
+            "Total_Beds": 50,
+            "Available_Beds": 22,
+            "Has_Specialist": True,
+            "stock": {"Oral Medication": 70, "IV Saline": 35, "Injection": 25}
+        },
+    }
+
+
+
