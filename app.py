@@ -643,3 +643,89 @@ elif role == "🏛️ Health Official":
             st.caption("Adjust inputs above, then click **Compute Optimal Spray Route** to see results.")
 
 
+elif role == "🏥 Hospital Staff":
+    st.title("🏥 Hospital Resource & Capacity Management")
+    st.markdown(
+        "Manage live bed capacity, dengue specialist on-duty status, and fulfill citizen medicine delivery orders. "
+        "Updates here immediately affect Citizen hospital routing."
+    )
+
+    hospitals = st.session_state["hospital_inventory"]
+    hospital_ids = list(hospitals.keys())
+
+    selected_h_id = st.selectbox(
+        "Select Hospital Facility:",
+        hospital_ids,
+        format_func=lambda hid: f"{hospitals[hid]['name']} ({hospitals[hid]['zone']}) - ID: {hid}"
+    )
+
+    curr_hosp = hospitals[selected_h_id]
+
+    st.markdown("---")
+    col_cap1, col_cap2 = st.columns([1, 1])
+
+    with col_cap1:
+        st.subheader("🛏️ Bed Capacity & Medical Staffing")
+        
+        total_beds = curr_hosp["Total_Beds"]
+        curr_avail = curr_hosp["Available_Beds"]
+        has_spec = curr_hosp["Has_Specialist"]
+
+        st.write(f"**Total Capacity:** `{total_beds}` beds")
+
+        new_avail_beds = st.number_input(
+            "Available Beds Count:",
+            min_value=0,
+            max_value=total_beds,
+            value=curr_avail,
+            step=1
+        )
+
+        new_spec_status = st.checkbox(
+            "👨‍⚕️ Dengue/Infectious Disease Specialist On-Duty",
+            value=has_spec
+        )
+
+        if st.button("💾 Commit Capacity Update", type="primary"):
+            st.session_state["hospital_inventory"][selected_h_id]["Available_Beds"] = int(new_avail_beds)
+            st.session_state["hospital_inventory"][selected_h_id]["Has_Specialist"] = bool(new_spec_status)
+            st.success(f"✅ Successfully updated {curr_hosp['name']} capacity!")
+            st.rerun()
+
+    with col_cap2:
+        st.subheader("💊 Medicine & IV Fluid Inventory")
+        stock = curr_hosp["stock"]
+
+        stock_df = pd.DataFrame([
+            {"Item": item, "Current Stock Units": qty}
+            for item, qty in stock.items()
+        ])
+        st.table(stock_df)
+
+        st.markdown("##### 📦 Citizen Delivery Orders")
+        pending = [
+            o for o in st.session_state["delivery_orders"]
+            if o["hospital_id"] == selected_h_id and o["status"] == "pending"
+        ]
+
+        if not pending:
+            st.info("No pending delivery orders for this hospital.")
+        else:
+            for order in pending:
+                st.write(
+                    f"**Order #{order['id']}** — {order['citizen_name']} "
+                    f"({order['citizen_location']}): {order['quantity']} × {order['item']}"
+                )
+                if st.button(f"✅ Deliver Order #{order['id']}", key=f"deliver_{order['id']}"):
+                    inv = st.session_state["hospital_inventory"][selected_h_id]["stock"]
+                    if inv[order["item"]] >= order["quantity"]:
+                        inv[order["item"]] -= order["quantity"]
+                        order["status"] = "delivered"
+                        st.success(
+                            f"✅ Delivered {order['quantity']} × {order['item']} to {order['citizen_name']}. "
+                            f"Inventory updated."
+                        )
+                        st.rerun()
+                    else:
+                        st.error(f"Insufficient stock of {order['item']} to fulfill order #{order['id']}.")
+
